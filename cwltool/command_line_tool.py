@@ -845,7 +845,7 @@ class CommandLineTool(Process):
         output_callbacks: Optional[OutputCallbackType],
         runtimeContext: RuntimeContext,
     ) -> Generator[Union[JobBase, CallbackJob], None, None]:
-    
+
         workReuse, _ = self.get_requirement("WorkReuse")
         enableReuse = workReuse.get("enableReuse", True) if workReuse else True
 
