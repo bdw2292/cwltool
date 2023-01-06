@@ -845,6 +845,7 @@ class CommandLineTool(Process):
         output_callbacks: Optional[OutputCallbackType],
         runtimeContext: RuntimeContext,
     ) -> Generator[Union[JobBase, CallbackJob], None, None]:
+    
         workReuse, _ = self.get_requirement("WorkReuse")
         enableReuse = workReuse.get("enableReuse", True) if workReuse else True
 
@@ -956,6 +957,7 @@ class CommandLineTool(Process):
             )
 
             jobcache = os.path.join(runtimeContext.cachedir, cachekey)
+
             # Create a lockfile to manage cache status.
             jobcachepending = f"{jobcache}.status"
             jobcachelock = None
@@ -996,6 +998,7 @@ class CommandLineTool(Process):
                 os.makedirs(jobcache)
                 runtimeContext = runtimeContext.copy()
                 runtimeContext.outdir = jobcache
+
                 with open(f'{jobcache}/jobname', mode='w', encoding='utf-8') as f:
                     f.write(jobname)
                 def update_status_output_callback(
