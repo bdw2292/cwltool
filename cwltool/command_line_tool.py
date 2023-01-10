@@ -966,6 +966,8 @@ class CommandLineTool(Process):
             # Opens the file for read/write, or creates an empty file.
             jobcachelock = open(jobcachepending, "a+")
 
+            with open(f"{jobcache}.jobname", mode='w', encoding='utf-8') as f:
+                f.write(jobname)
             # get the shared lock to ensure no other process is trying
             # to write to this cache
             shared_file_lock(jobcachelock)
@@ -999,8 +1001,6 @@ class CommandLineTool(Process):
                 runtimeContext = runtimeContext.copy()
                 runtimeContext.outdir = jobcache
 
-                with open(f'{jobcache}/jobname', mode='w', encoding='utf-8') as f:
-                    f.write(jobname)
                 def update_status_output_callback(
                     output_callbacks: OutputCallbackType,
                     jobcachelock: TextIO,
