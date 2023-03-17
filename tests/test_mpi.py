@@ -140,8 +140,7 @@ class TestMpiRun:
         stderr = StringIO()
         with working_directory(tmp_path):
             rc = main(
-                argsl=cwltool_args(fake_mpi_conf)
-                + [get_data("tests/wf/mpi_simple.cwl")],
+                argsl=cwltool_args(fake_mpi_conf) + [get_data("tests/wf/mpi_simple.cwl")],
                 stdout=stdout,
                 stderr=stderr,
             )
@@ -292,9 +291,7 @@ def schema_ext11() -> Generator[Names, None, None]:
 
 mpiReq = CommentedMap({"class": MPIRequirementName, "processes": 1})
 containerReq = CommentedMap({"class": "DockerRequirement"})
-basetool = CommentedMap(
-    {"cwlVersion": "v1.1", "inputs": CommentedSeq(), "outputs": CommentedSeq()}
-)
+basetool = CommentedMap({"cwlVersion": "v1.1", "inputs": CommentedSeq(), "outputs": CommentedSeq()})
 
 
 def mk_tool(
@@ -353,7 +350,7 @@ def test_docker_mpi_both_required(schema_ext11: Names) -> None:
     with pytest.raises(cwltool.errors.UnsupportedRequirement):
         lc, rc, tool = mk_tool(schema_ext11, [], reqs=[mpiReq, containerReq])
         clt = CommandLineTool(tool, lc)
-        jr = clt.make_job_runner(rc)
+        clt.make_job_runner(rc)
 
 
 def test_docker_mpi_both_hinted(schema_ext11: Names) -> None:
@@ -361,4 +358,4 @@ def test_docker_mpi_both_hinted(schema_ext11: Names) -> None:
     with pytest.raises(cwltool.errors.UnsupportedRequirement):
         lc, rc, tool = mk_tool(schema_ext11, [], hints=[mpiReq, containerReq])
         clt = CommandLineTool(tool, lc)
-        jr = clt.make_job_runner(rc)
+        clt.make_job_runner(rc)

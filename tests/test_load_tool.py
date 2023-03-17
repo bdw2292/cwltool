@@ -24,7 +24,7 @@ def test_check_version() -> None:
 
     Attempting to execute without updating to the internal version should raise an error.
     """
-    joborder = {"inp": "abc"}  # type: CWLObjectType
+    joborder: CWLObjectType = {"inp": "abc"}
     loadingContext = LoadingContext({"do_update": True})
     tool = load_tool(get_data("tests/echo.cwl"), loadingContext)
     for _ in tool.job(joborder, None, RuntimeContext()):
@@ -51,9 +51,7 @@ def test_use_metadata() -> None:
 
 def test_checklink_outputSource() -> None:
     """Is outputSource resolved correctly independent of value of do_validate."""
-    outsrc = (
-        Path(get_data("tests/wf/1st-workflow.cwl")).as_uri() + "#argument/classfile"
-    )
+    outsrc = Path(get_data("tests/wf/1st-workflow.cwl")).as_uri() + "#argument/classfile"
 
     loadingContext = LoadingContext({"do_validate": True})
     tool = load_tool(get_data("tests/wf/1st-workflow.cwl"), loadingContext)
@@ -122,11 +120,26 @@ def test_load_graph_fragment_from_packed() -> None:
         # This was solved by making a shallow copy of the metadata
         # dict to ensure that the updater did not modify the original
         # document.
-        uri2 = (
-            Path(get_data("tests/wf/packed-with-loadlisting.cwl")).as_uri()
-            + "#16169-step.cwl"
-        )
-        tool2 = load_tool(uri2, loadingContext)
+        uri2 = Path(get_data("tests/wf/packed-with-loadlisting.cwl")).as_uri() + "#16169-step.cwl"
+        load_tool(uri2, loadingContext)
 
     finally:
         use_standard_schema("v1.0")
+
+
+def test_import_tracked() -> None:
+    """Test that $import and $include are tracked in the index."""
+
+    loadingContext = LoadingContext({"fast_parser": True})
+    tool = load_tool(get_data("tests/wf/811-12.cwl"), loadingContext)
+    path = "import:file://%s" % get_data("tests/wf/schemadef-type.yml")
+
+    assert tool.doc_loader is not None
+    assert path in tool.doc_loader.idx
+
+    loadingContext = LoadingContext({"fast_parser": False})
+    tool = load_tool(get_data("tests/wf/811.cwl"), loadingContext)
+    path = "import:file://%s" % get_data("tests/wf/schemadef-type.yml")
+
+    assert tool.doc_loader is not None
+    assert path in tool.doc_loader.idx

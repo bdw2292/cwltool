@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple, cast
 
+from mypy_extensions import mypyc_attr
 from schema_salad.exceptions import ValidationException
 from schema_salad.ref_resolver import uri_file_path
 from schema_salad.sourceline import SourceLine
@@ -15,9 +16,7 @@ from .loghandler import _logger
 from .stdfsaccess import abspath
 from .utils import CWLObjectType, dedup, downloadHttpFile
 
-MapperEnt = collections.namedtuple(
-    "MapperEnt", ["resolved", "target", "type", "staged"]
-)
+MapperEnt = collections.namedtuple("MapperEnt", ["resolved", "target", "type", "staged"])
 """ Mapper entries.
 
 .. py:attribute:: resolved
@@ -44,6 +43,7 @@ MapperEnt = collections.namedtuple(
 """
 
 
+@mypyc_attr(allow_interpreted_subclasses=True)
 class PathMapper:
     """
     Mapping of files from relative path provided in the file to a tuple.
@@ -89,7 +89,7 @@ class PathMapper:
         separateDirs: bool = True,
     ) -> None:
         """Initialize the PathMapper."""
-        self._pathmap = {}  # type: Dict[str, MapperEnt]
+        self._pathmap: Dict[str, MapperEnt] = {}
         self.stagedir = stagedir
         self.separateDirs = separateDirs
         self.setup(dedup(referenced_files), basedir)
@@ -188,18 +188,18 @@ class PathMapper:
             )
 
     def setup(self, referenced_files: List[CWLObjectType], basedir: str) -> None:
-
         # Go through each file and set the target to its own directory along
         # with any secondary files.
         stagedir = self.stagedir
         for fob in referenced_files:
             if self.separateDirs:
                 stagedir = os.path.join(self.stagedir, "stg%s" % uuid.uuid4())
+            copy = cast(bool, fob.get("writable", False) or False)
             self.visit(
                 fob,
                 stagedir,
                 basedir,
-                copy=cast(bool, fob.get("writable", False)),
+                copy=copy,
                 staged=True,
             )
 
@@ -236,9 +236,8 @@ class PathMapper:
                 return (k, v[0])
         return None
 
-    def update(
-        self, key: str, resolved: str, target: str, ctype: str, stage: bool
-    ) -> MapperEnt:
+    def update(self, key: str, resolved: str, target: str, ctype: str, stage: bool) -> MapperEnt:
+        """Update an existine entry."""
         m = MapperEnt(resolved, target, ctype, stage)
         self._pathmap[key] = m
         return m

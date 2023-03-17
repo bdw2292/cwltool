@@ -1,4 +1,4 @@
-name: Continuous integration tests
+name: CI Tests
 
 on:
   push:
@@ -12,15 +12,23 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  singularity_version: 3.8.3
+  TOX_SKIP_MISSING_INTERPRETERS: False
+  # Rich (pip)
+  FORCE_COLOR: 1
+  # Tox
+  PY_COLORS: 1
+  # Mypy (see https://github.com/python/mypy/issues/7771)
+  TERM: xterm-color
+  MYPY_FORCE_COLOR: 1
+  MYPY_FORCE_TERMINAL_WIDTH: 200
+  # Pytest
+  PYTEST_ADDOPTS: --color=yes
 
 jobs:
 
   tox:
-    name: CI tests via Tox
-
+    name: Tox
     runs-on: ubuntu-20.04  # 22.04 doesn't support Python 3.6
-
     strategy:
       matrix:
         py-ver-major: [3]
@@ -30,6 +38,9 @@ jobs:
           - py-ver-major: 3
             py-ver-minor: 6
             step: mypy
+          - py-ver-major: 3
+            py-ver-minor: 6
+            step: lint
 
     env:
       py-semver: ${{ format('{0}.{1}', matrix.py-ver-major, matrix.py-ver-minor) }}
@@ -42,13 +53,13 @@ jobs:
 
       - name: Set up Singularity
         if: ${{ matrix.step == 'unit' || matrix.step == 'mypy' }}
-        uses: eWaterCycle/setup-singularity@v7
-        with:
-          singularity-version: ${{ env.singularity_version }}
+        run: |
+          wget --no-verbose https://github.com/sylabs/singularity/releases/download/v3.10.4/singularity-ce_3.10.4-focal_amd64.deb
+          sudo apt-get install -y ./singularity-ce_3.10.4-focal_amd64.deb
 
       - name: Give the test runner user a name to make provenance happy.
         if: ${{ matrix.step == 'unit' || matrix.step == 'mypy' }}
-        run: sudo usermod -c 'CI Runner' $(whoami)
+        run: sudo usermod -c 'CI Runner' "$(whoami)"
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -62,7 +73,7 @@ jobs:
       - name: Upgrade setuptools and install tox
         run: |
           pip install -U pip setuptools wheel
-          pip install "tox<4" tox-gh-actions
+          pip install "tox<4" "tox-gh-actions<3"
 
       - name: MyPy cache
         if: ${{ matrix.step == 'mypy' }}
@@ -82,8 +93,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   tox-style:
-    name: CI linters via Tox
-
+    name: Linters
     runs-on: ubuntu-20.04
 
     strategy:
@@ -108,7 +118,7 @@ jobs:
       - name: Upgrade setuptools and install tox
         run: |
           pip install -U pip setuptools wheel
-          pip install tox tox-gh-actions
+          pip install "tox<4" "tox-gh-actions<3"
 
       - if: ${{ matrix.step == 'pydocstyle' && github.event_name == 'pull_request'}}
         name: Create local branch for diff-quality for PRs
@@ -117,10 +127,47 @@ jobs:
       - name: Test with tox
         run: tox
 
-  conformance_tests:
-    name: CWL spec conformance tests
+  clean_working_dir:
+    name: No leftovers
+    runs-on: ubuntu-22.04
+    env:
+      py-semver: "3.11"
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-    runs-on: ubuntu-20.04
+      - name: Set up Singularity
+        run: |
+          wget --no-verbose https://github.com/sylabs/singularity/releases/download/v3.10.4/singularity-ce_3.10.4-focal_amd64.deb
+          sudo apt-get install -y ./singularity-ce_3.10.4-focal_amd64.deb
+
+      - name: Give the test runner user a name to make provenance happy.
+        run: sudo usermod -c 'CI Runner' "$(whoami)"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.py-semver }}
+          cache: pip
+
+      - name: install with test dependencies
+        run: |
+          pip install -U pip setuptools wheel
+          pip install --no-build-isolation -rtest-requirements.txt .[deps]
+
+      - name: make working directory read-only
+        run: |
+          mkdir .pytest_cache
+          chmod a-w .
+
+      - name: run tests
+        run: make test
+
+
+  conformance_tests:
+    name: CWL conformance
+    runs-on: ubuntu-22.04
 
     strategy:
       matrix:
@@ -137,9 +184,16 @@ jobs:
 
       - name: Set up Singularity
         if: ${{ matrix.container == 'singularity' }}
-        uses: eWaterCycle/setup-singularity@v7
+        run: |
+          wget --no-verbose https://github.com/sylabs/singularity/releases/download/v3.10.4/singularity-ce_3.10.4-jammy_amd64.deb
+          sudo apt-get install -y ./singularity-ce_3.10.4-jammy_amd64.deb
+
+      - name: Singularity cache
+        if: ${{ matrix.container == 'singularity' }}
+        uses: actions/cache@v3
         with:
-          singularity-version: ${{ env.singularity_version }}
+          path: sifcache
+          key: singularity
 
       - name: Set up Podman
         if: ${{ matrix.container == 'podman' }}
@@ -148,29 +202,32 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: 3.11
           cache: pip
 
-      - name: Run CWL conformance tests ${{ matrix.cwl-version }}
+      - name: "Test CWL ${{ matrix.cwl-version }} conformance"
         env:
-          version: ${{ matrix.cwl-version }}
-          container: ${{ matrix.container }}
-          spec_branch: main
+          VERSION: ${{ matrix.cwl-version }}
+          CONTAINER: ${{ matrix.container }}
+          GIT_TARGET: main
           CWLTOOL_OPTIONS: ${{ matrix.extras }}
         run: ./conformance-test.sh
-
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
   release_test:
     name: cwltool release test
-
     runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v3
 
       - name: Set up Singularity
-        uses: eWaterCycle/setup-singularity@v7
-        with:
-          singularity-version: ${{ env.singularity_version }}
+        run: |
+          wget --no-verbose https://github.com/sylabs/singularity/releases/download/v3.10.4/singularity-ce_3.10.4-jammy_amd64.deb
+          sudo apt-get install -y ./singularity-ce_3.10.4-jammy_amd64.deb
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -182,7 +239,7 @@ jobs:
             test-requirements.txt
 
       - name: Give the test runner user a name to make provenance happy.
-        run: sudo usermod -c 'CI Runner' $(whoami)
+        run: sudo usermod -c 'CI Runner' "$(whoami)"
 
       - name: Install packages
         run: |
@@ -202,10 +259,10 @@ jobs:
         run: ./build-cwltool-docker.sh
 
   macos:
-    name: CI test on macos-latest
+    name: Test on macos-latest
     runs-on: macos-latest
     env:
-      TOXENV: py310-unit
+      TOXENV: py311-unit
     steps:
       - uses: actions/checkout@v3
         with:
@@ -221,7 +278,7 @@ jobs:
       - name: Upgrade setuptools and install tox
         run: |
           pip install -U pip setuptools wheel
-          pip install tox tox-gh-actions
+          pip install "tox<4" "tox-gh-actions<3"
       # # docker for mac install is not currently stable
       # - name: 'SETUP MacOS: load Homebrew cache'
       #   uses: actions/cache@v3
@@ -236,7 +293,6 @@ jobs:
       - name: Test with tox
         run: tox
       - name: Upload coverage to Codecov
-        if: ${{ matrix.step == 'unit' }}
         uses: codecov/codecov-action@v3
         with:
           fail_ci_if_error: true

@@ -23,9 +23,9 @@ from .loghandler import _logger
 from .pathmapper import MapperEnt, PathMapper
 from .utils import CWLObjectType, create_tmp_dir, ensure_writable
 
-_IMAGES = set()  # type: Set[str]
+_IMAGES: Set[str] = set()
 _IMAGES_LOCK = threading.Lock()
-__docker_machine_mounts = None  # type: Optional[List[str]]
+__docker_machine_mounts: Optional[List[str]] = None
 __docker_machine_mounts_lock = threading.Lock()
 
 
@@ -83,7 +83,7 @@ class DockerCommandLineJob(ContainerCommandLineJob):
         self,
         builder: Builder,
         joborder: CWLObjectType,
-        make_path_mapper: Callable[..., PathMapper],
+        make_path_mapper: Callable[[List[CWLObjectType], str, RuntimeContext, bool], PathMapper],
         requirements: List[CWLObjectType],
         hints: List[CWLObjectType],
         name: str,
@@ -106,10 +106,7 @@ class DockerCommandLineJob(ContainerCommandLineJob):
         """
         found = False
 
-        if (
-            "dockerImageId" not in docker_requirement
-            and "dockerPull" in docker_requirement
-        ):
+        if "dockerImageId" not in docker_requirement and "dockerPull" in docker_requirement:
             docker_requirement["dockerImageId"] = docker_requirement["dockerPull"]
 
         with _IMAGES_LOCK:
@@ -117,9 +114,7 @@ class DockerCommandLineJob(ContainerCommandLineJob):
                 return True
 
         for line in (
-            subprocess.check_output(  # nosec
-                [self.docker_exec, "images", "--no-trunc", "--all"]
-            )
+            subprocess.check_output([self.docker_exec, "images", "--no-trunc", "--all"])  # nosec
             .decode("utf-8")
             .splitlines()
         ):
@@ -150,7 +145,7 @@ class DockerCommandLineJob(ContainerCommandLineJob):
                 pass
 
         if (force_pull or not found) and pull_image:
-            cmd = []  # type: List[str]
+            cmd: List[str] = []
             if "dockerPull" in docker_requirement:
                 cmd = [self.docker_exec, "pull", str(docker_requirement["dockerPull"])]
                 _logger.info(str(cmd))
@@ -178,17 +173,13 @@ class DockerCommandLineJob(ContainerCommandLineJob):
                         docker_requirement["dockerLoad"],
                     )
                     with open(docker_requirement["dockerLoad"], "rb") as dload:
-                        loadproc = subprocess.Popen(  # nosec
-                            cmd, stdin=dload, stdout=sys.stderr
-                        )
+                        loadproc = subprocess.Popen(cmd, stdin=dload, stdout=sys.stderr)  # nosec
                 else:
                     loadproc = subprocess.Popen(  # nosec
                         cmd, stdin=subprocess.PIPE, stdout=sys.stderr
                     )
                     assert loadproc.stdin is not None  # nosec
-                    _logger.info(
-                        "Sending GET request to %s", docker_requirement["dockerLoad"]
-                    )
+                    _logger.info("Sending GET request to %s", docker_requirement["dockerLoad"])
                     req = requests.get(docker_requirement["dockerLoad"], stream=True)
                     size = 0
                     for chunk in req.iter_content(1024 * 1024):
@@ -229,16 +220,12 @@ class DockerCommandLineJob(ContainerCommandLineJob):
         if not shutil.which(self.docker_exec):
             raise WorkflowException(f"{self.docker_exec} executable is not available")
 
-        if self.get_image(
-            cast(Dict[str, str], r), pull_image, force_pull, tmp_outdir_prefix
-        ):
+        if self.get_image(cast(Dict[str, str], r), pull_image, force_pull, tmp_outdir_prefix):
             return cast(Optional[str], r["dockerImageId"])
         raise WorkflowException("Docker image %s not found" % r["dockerImageId"])
 
     @staticmethod
-    def append_volume(
-        runtime: List[str], source: str, target: str, writable: bool = False
-    ) -> None:
+    def append_volume(runtime: List[str], source: str, target: str, writable: bool = False) -> None:
         """Add binding arguments to the runtime list."""
         options = [
             "type=bind",
@@ -307,9 +294,7 @@ class DockerCommandLineJob(ContainerCommandLineJob):
                 os.makedirs(host_outdir_tgt)
         else:
             if self.inplace_update:
-                self.append_volume(
-                    runtime, volume.resolved, volume.target, writable=True
-                )
+                self.append_volume(runtime, volume.resolved, volume.target, writable=True)
             else:
                 if not host_outdir_tgt:
                     tmpdir = create_tmp_dir(tmpdir_prefix)
@@ -374,7 +359,6 @@ class DockerCommandLineJob(ContainerCommandLineJob):
 
         runtime.append("--workdir=%s" % (self.builder.outdir))
         if not user_space_docker_cmd:
-
             if not runtimeContext.no_read_only:
                 runtime.append("--read-only=true")
 
@@ -390,9 +374,7 @@ class DockerCommandLineJob(ContainerCommandLineJob):
             euid, egid = docker_vm_id()
             euid, egid = euid or os.geteuid(), egid or os.getgid()
 
-            if runtimeContext.no_match_user is False and (
-                euid is not None and egid is not None
-            ):
+            if runtimeContext.no_match_user is False and (euid is not None and egid is not None):
                 runtime.append("--user=%d:%d" % (euid, egid))
 
         if runtimeContext.rm_container:
@@ -401,7 +383,7 @@ class DockerCommandLineJob(ContainerCommandLineJob):
         if self.builder.resources.get("cudaDeviceCount"):
             runtime.append("--gpus=" + str(self.builder.resources["cudaDeviceCount"]))
 
-        cidfile_path = None  # type: Optional[str]
+        cidfile_path: Optional[str] = None
         # add parameters to docker to write a container ID file
         if runtimeContext.user_space_docker_cmd is None:
             if runtimeContext.cidfile_dir:
@@ -470,7 +452,7 @@ class PodmanCommandLineJob(DockerCommandLineJob):
         self,
         builder: Builder,
         joborder: CWLObjectType,
-        make_path_mapper: Callable[..., PathMapper],
+        make_path_mapper: Callable[[List[CWLObjectType], str, RuntimeContext, bool], PathMapper],
         requirements: List[CWLObjectType],
         hints: List[CWLObjectType],
         name: str,
