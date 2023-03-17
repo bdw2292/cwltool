@@ -19,6 +19,7 @@ from tempfile import NamedTemporaryFile
 from types import ModuleType
 from typing import (
     IO,
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -42,7 +43,7 @@ from cachecontrol.caches import FileCache
 from mypy_extensions import TypedDict, mypyc_attr
 from schema_salad.exceptions import ValidationException
 from schema_salad.ref_resolver import Loader
-from typing_extensions import TYPE_CHECKING, Deque, Literal
+from typing_extensions import Deque, Literal
 
 if TYPE_CHECKING:
     from .command_line_tool import CallbackJob, ExpressionJob
@@ -50,13 +51,13 @@ if TYPE_CHECKING:
     from .stdfsaccess import StdFsAccess
     from .workflow_job import WorkflowJob
 
-__random_outdir = None  # type: Optional[str]
+__random_outdir: Optional[str] = None
 
 CONTENT_LIMIT = 64 * 1024
 
 DEFAULT_TMP_PREFIX = tempfile.gettempdir() + os.path.sep
 
-processes_to_kill = collections.deque()  # type: Deque[subprocess.Popen[str]]
+processes_to_kill: Deque["subprocess.Popen[str]"] = collections.deque()
 
 CWLOutputAtomType = Union[
     None,
@@ -65,15 +66,11 @@ CWLOutputAtomType = Union[
     int,
     float,
     MutableSequence[
-        Union[
-            None, bool, str, int, float, MutableSequence[Any], MutableMapping[str, Any]
-        ]
+        Union[None, bool, str, int, float, MutableSequence[Any], MutableMapping[str, Any]]
     ],
     MutableMapping[
         str,
-        Union[
-            None, bool, str, int, float, MutableSequence[Any], MutableMapping[str, Any]
-        ],
+        Union[None, bool, str, int, float, MutableSequence[Any], MutableMapping[str, Any]],
     ],
 ]
 CWLOutputType = Union[
@@ -87,9 +84,7 @@ CWLOutputType = Union[
 CWLObjectType = MutableMapping[str, Optional[CWLOutputType]]
 """Typical raw dictionary found in lightly parsed CWL."""
 
-JobsType = Union[
-    "CommandLineJob", "JobBase", "WorkflowJob", "ExpressionJob", "CallbackJob"
-]
+JobsType = Union["CommandLineJob", "JobBase", "WorkflowJob", "ExpressionJob", "CallbackJob"]
 JobsGeneratorType = Generator[Optional[JobsType], None, None]
 OutputCallbackType = Callable[[Optional[CWLObjectType], str], None]
 ResolverType = Callable[["Loader", str], Optional[str]]
@@ -101,9 +96,7 @@ DirectoryType = TypedDict(
     "DirectoryType", {"class": str, "listing": List[CWLObjectType], "basename": str}
 )
 JSONAtomType = Union[Dict[str, Any], List[Any], str, int, float, bool, None]
-JSONType = Union[
-    Dict[str, JSONAtomType], List[JSONAtomType], str, int, float, bool, None
-]
+JSONType = Union[Dict[str, JSONAtomType], List[JSONAtomType], str, int, float, bool, None]
 WorkflowStateItem = NamedTuple(
     "WorkflowStateItem",
     [
@@ -116,9 +109,7 @@ WorkflowStateItem = NamedTuple(
 ParametersType = List[CWLObjectType]
 StepType = CWLObjectType  # WorkflowStep
 
-LoadListingType = Union[
-    Literal["no_listing"], Literal["shallow_listing"], Literal["deep_listing"]
-]
+LoadListingType = Union[Literal["no_listing"], Literal["shallow_listing"], Literal["deep_listing"]]
 
 
 def versionstring() -> str:
@@ -186,8 +177,7 @@ def cmp_like_py2(dict1: Dict[str, Any], dict2: Dict[str, Any]) -> int:
 
 def bytes2str_in_dicts(
     inp: Union[MutableMapping[str, Any], MutableSequence[Any], Any],
-):
-    # type: (...) -> Union[str, MutableSequence[Any], MutableMapping[str, Any]]
+) -> Union[str, MutableSequence[Any], MutableMapping[str, Any]]:
     """
     Convert any present byte string to unicode string, inplace.
 
@@ -252,12 +242,12 @@ def random_outdir() -> str:
 #
 # Simple multi-platform (fcntl/msvrt) file locking wrapper
 #
-fcntl = None  # type: Optional[ModuleType]
-msvcrt = None  # type: Optional[ModuleType]
+fcntl: Optional[ModuleType] = None
+msvcrt: Optional[ModuleType] = None
 try:
-    import fcntl  # type: ignore
+    import fcntl
 except ImportError:
-    import msvcrt  # type: ignore
+    import msvcrt
 
 
 def shared_file_lock(fd: IO[Any]) -> None:
@@ -274,15 +264,12 @@ def upgrade_lock(fd: IO[Any]) -> None:
         pass
 
 
-def adjustFileObjs(
-    rec, op
-):  # type: (Any, Union[Callable[..., Any], partial[Any]]) -> None
+def adjustFileObjs(rec: Any, op: Union[Callable[..., Any], "partial[Any]"]) -> None:
     """Apply an update function to each File object in the object `rec`."""
     visit_class(rec, ("File",), op)
 
 
-def adjustDirObjs(rec, op):
-    # type: (Any, Union[Callable[..., Any], partial[Any]]) -> None
+def adjustDirObjs(rec: Any, op: Union[Callable[..., Any], "partial[Any]"]) -> None:
     """Apply an update function to each Directory object in the object `rec`."""
     visit_class(rec, ("Directory",), op)
 
@@ -300,7 +287,7 @@ def dedup(listing: List[CWLObjectType]) -> List[CWLObjectType]:
                 adjustDirObjs(e, mark)
 
     dd = []
-    markdup = set()  # type: Set[str]
+    markdup: Set[str] = set()
     for r in listing:
         if r["location"] not in marksub and r["location"] not in markdup:
             dd.append(r)
@@ -309,28 +296,27 @@ def dedup(listing: List[CWLObjectType]) -> List[CWLObjectType]:
     return dd
 
 
-def get_listing(
-    fs_access: "StdFsAccess", rec: CWLObjectType, recursive: bool = True
-) -> None:
+def get_listing(fs_access: "StdFsAccess", rec: CWLObjectType, recursive: bool = True) -> None:
+    """Expand, recursively, any 'listing' fields in a Directory."""
     if rec.get("class") != "Directory":
-        finddirs = []  # type: List[CWLObjectType]
+        finddirs: List[CWLObjectType] = []
         visit_class(rec, ("Directory",), finddirs.append)
         for f in finddirs:
             get_listing(fs_access, f, recursive=recursive)
         return
     if "listing" in rec:
         return
-    listing = []  # type: List[CWLOutputAtomType]
+    listing: List[CWLOutputAtomType] = []
     loc = cast(str, rec["location"])
     for ld in fs_access.listdir(loc):
         parse = urllib.parse.urlparse(ld)
         bn = os.path.basename(urllib.request.url2pathname(parse.path))
         if fs_access.isdir(ld):
-            ent = {
+            ent: MutableMapping[str, Any] = {
                 "class": "Directory",
                 "location": ld,
                 "basename": bn,
-            }  # type: MutableMapping[str, Any]
+            }
             if recursive:
                 get_listing(fs_access, ent, recursive)
             listing.append(ent)
@@ -339,7 +325,7 @@ def get_listing(
     rec["listing"] = listing
 
 
-def trim_listing(obj):  # type: (Dict[str, Any]) -> None
+def trim_listing(obj: Dict[str, Any]) -> None:
     """
     Remove 'listing' field from Directory objects that are file references.
 
@@ -414,7 +400,8 @@ def ensure_writable(path: str, include_root: bool = False) -> None:
         add_writable_flag(path)
 
 
-def ensure_non_writable(path):  # type: (str) -> None
+def ensure_non_writable(path: str) -> None:
+    """Attempt to change permissions to ensure that a path is not writable."""
     if os.path.isdir(path):
         for root, dirs, files in os.walk(path):
             for name in files:
@@ -442,15 +429,13 @@ def normalizeFilesDirs(
         ]
     ]
 ) -> None:
-    def addLocation(d):  # type: (Dict[str, Any]) -> None
+    def addLocation(d: Dict[str, Any]) -> None:
         if "location" not in d:
             if d["class"] == "File" and ("contents" not in d):
                 raise ValidationException(
                     "Anonymous file object must have 'contents' and 'basename' fields."
                 )
-            if d["class"] == "Directory" and (
-                "listing" not in d or "basename" not in d
-            ):
+            if d["class"] == "Directory" and ("listing" not in d or "basename" not in d):
                 raise ValidationException(
                     "Anonymous directory object must have 'listing' and 'basename' fields."
                 )
@@ -517,9 +502,8 @@ class HasReqsHints:
         self.requirements: List[CWLObjectType] = []
         self.hints: List[CWLObjectType] = []
 
-    def get_requirement(
-        self, feature: str
-    ) -> Tuple[Optional[CWLObjectType], Optional[bool]]:
+    def get_requirement(self, feature: str) -> Tuple[Optional[CWLObjectType], Optional[bool]]:
+        """Retrieve the named feature from the requirements field, or the hints field."""
         for item in reversed(self.requirements):
             if item["class"] == feature:
                 return (item, True)

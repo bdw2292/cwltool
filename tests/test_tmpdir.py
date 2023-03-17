@@ -15,7 +15,7 @@ from cwltool.context import LoadingContext, RuntimeContext
 from cwltool.docker import DockerCommandLineJob
 from cwltool.job import JobBase
 from cwltool.main import main
-from cwltool.pathmapper import MapperEnt, PathMapper
+from cwltool.pathmapper import MapperEnt
 from cwltool.stdfsaccess import StdFsAccess
 from cwltool.update import INTERNAL_VERSION, ORIGINAL_CWLVERSION
 from cwltool.utils import create_tmp_dir
@@ -109,13 +109,9 @@ def test_commandLineTool_job_tmpdir_prefix(tmp_path: Path) -> None:
 
 
 @needs_docker
-def test_dockerfile_tmpdir_prefix(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_dockerfile_tmpdir_prefix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that DockerCommandLineJob.get_image respects temp directory directives."""
-    monkeypatch.setattr(
-        target=subprocess, name="check_call", value=lambda *args, **kwargs: True
-    )
+    monkeypatch.setattr(target=subprocess, name="check_call", value=lambda *args, **kwargs: True)
     (tmp_path / "out").mkdir()
     tmp_outdir_prefix = tmp_path / "out" / "1"
     (tmp_path / "3").mkdir()
@@ -148,7 +144,9 @@ def test_dockerfile_tmpdir_prefix(
         INTERNAL_VERSION,
         "docker",
     )
-    assert DockerCommandLineJob(builder, {}, PathMapper, [], [], "").get_image(
+    assert DockerCommandLineJob(
+        builder, {}, CommandLineTool.make_path_mapper, [], [], ""
+    ).get_image(
         {
             "class": "DockerRequirement",
             "dockerFile": "FROM debian:stable-slim",
@@ -197,7 +195,7 @@ def test_docker_tmpdir_prefix(tmp_path: Path) -> None:
         INTERNAL_VERSION,
         "docker",
     )
-    job = DockerCommandLineJob(builder, {}, PathMapper, [], [], "")
+    job = DockerCommandLineJob(builder, {}, CommandLineTool.make_path_mapper, [], [], "")
     runtime: List[str] = []
 
     volume_writable_file = MapperEnt(
@@ -220,9 +218,7 @@ def test_docker_tmpdir_prefix(tmp_path: Path) -> None:
         resolved=str(resolved_writable_dir), target="bar", type=None, staged=None
     )
     (tmp_path / "2").mkdir()
-    job.add_writable_directory_volume(
-        runtime, volume_dir, None, str(tmp_path / "2" / "dir")
-    )
+    job.add_writable_directory_volume(runtime, volume_dir, None, str(tmp_path / "2" / "dir"))
     children = sorted((tmp_path / "2").glob("*"))
     assert len(children) == 1
     subdir = tmp_path / "2" / children[0]
@@ -235,9 +231,7 @@ def test_docker_tmpdir_prefix(tmp_path: Path) -> None:
 
     volume_file = MapperEnt(resolved="Hoopla!", target="baz", type=None, staged=None)
     (tmp_path / "4").mkdir()
-    job.create_file_and_add_volume(
-        runtime, volume_file, None, None, str(tmp_path / "4" / "file")
-    )
+    job.create_file_and_add_volume(runtime, volume_file, None, None, str(tmp_path / "4" / "file"))
     children = sorted((tmp_path / "4").glob("*"))
     assert len(children) == 1
     subdir = tmp_path / "4" / children[0]

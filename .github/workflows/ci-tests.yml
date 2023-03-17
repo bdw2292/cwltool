@@ -11,6 +11,19 @@ concurrency:
   group: build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  TOX_SKIP_MISSING_INTERPRETERS: False
+  # Rich (pip)
+  FORCE_COLOR: 1
+  # Tox
+  PY_COLORS: 1
+  # Mypy (see https://github.com/python/mypy/issues/7771)
+  TERM: xterm-color
+  MYPY_FORCE_COLOR: 1
+  MYPY_FORCE_TERMINAL_WIDTH: 200
+  # Pytest
+  PYTEST_ADDOPTS: --color=yes
+
 jobs:
 
   tox:
@@ -25,6 +38,9 @@ jobs:
           - py-ver-major: 3
             py-ver-minor: 6
             step: mypy
+          - py-ver-major: 3
+            py-ver-minor: 6
+            step: lint
 
     env:
       py-semver: ${{ format('{0}.{1}', matrix.py-ver-major, matrix.py-ver-minor) }}
@@ -43,7 +59,7 @@ jobs:
 
       - name: Give the test runner user a name to make provenance happy.
         if: ${{ matrix.step == 'unit' || matrix.step == 'mypy' }}
-        run: sudo usermod -c 'CI Runner' $(whoami)
+        run: sudo usermod -c 'CI Runner' "$(whoami)"
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -57,7 +73,7 @@ jobs:
       - name: Upgrade setuptools and install tox
         run: |
           pip install -U pip setuptools wheel
-          pip install "tox<4" tox-gh-actions
+          pip install "tox<4" "tox-gh-actions<3"
 
       - name: MyPy cache
         if: ${{ matrix.step == 'mypy' }}
@@ -102,7 +118,7 @@ jobs:
       - name: Upgrade setuptools and install tox
         run: |
           pip install -U pip setuptools wheel
-          pip install tox tox-gh-actions
+          pip install "tox<4" "tox-gh-actions<3"
 
       - if: ${{ matrix.step == 'pydocstyle' && github.event_name == 'pull_request'}}
         name: Create local branch for diff-quality for PRs
@@ -110,6 +126,44 @@ jobs:
 
       - name: Test with tox
         run: tox
+
+  clean_working_dir:
+    name: No leftovers
+    runs-on: ubuntu-22.04
+    env:
+      py-semver: "3.11"
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Singularity
+        run: |
+          wget --no-verbose https://github.com/sylabs/singularity/releases/download/v3.10.4/singularity-ce_3.10.4-focal_amd64.deb
+          sudo apt-get install -y ./singularity-ce_3.10.4-focal_amd64.deb
+
+      - name: Give the test runner user a name to make provenance happy.
+        run: sudo usermod -c 'CI Runner' "$(whoami)"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.py-semver }}
+          cache: pip
+
+      - name: install with test dependencies
+        run: |
+          pip install -U pip setuptools wheel
+          pip install --no-build-isolation -rtest-requirements.txt .[deps]
+
+      - name: make working directory read-only
+        run: |
+          mkdir .pytest_cache
+          chmod a-w .
+
+      - name: run tests
+        run: make test
+
 
   conformance_tests:
     name: CWL conformance
@@ -151,7 +205,7 @@ jobs:
           python-version: 3.11
           cache: pip
 
-      - name: "Test CWL ${{ matrix.version }} conformance"
+      - name: "Test CWL ${{ matrix.cwl-version }} conformance"
         env:
           VERSION: ${{ matrix.cwl-version }}
           CONTAINER: ${{ matrix.container }}
@@ -185,7 +239,7 @@ jobs:
             test-requirements.txt
 
       - name: Give the test runner user a name to make provenance happy.
-        run: sudo usermod -c 'CI Runner' $(whoami)
+        run: sudo usermod -c 'CI Runner' "$(whoami)"
 
       - name: Install packages
         run: |
@@ -208,7 +262,7 @@ jobs:
     name: Test on macos-latest
     runs-on: macos-latest
     env:
-      TOXENV: py310-unit
+      TOXENV: py311-unit
     steps:
       - uses: actions/checkout@v3
         with:
@@ -224,7 +278,7 @@ jobs:
       - name: Upgrade setuptools and install tox
         run: |
           pip install -U pip setuptools wheel
-          pip install tox tox-gh-actions
+          pip install "tox<4" "tox-gh-actions<3"
       # # docker for mac install is not currently stable
       # - name: 'SETUP MacOS: load Homebrew cache'
       #   uses: actions/cache@v3
@@ -239,7 +293,6 @@ jobs:
       - name: Test with tox
         run: tox
       - name: Upload coverage to Codecov
-        if: ${{ matrix.step == 'unit' }}
         uses: codecov/codecov-action@v3
         with:
           fail_ci_if_error: true

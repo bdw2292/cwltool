@@ -17,7 +17,8 @@ if os.name == "nt":
         "Windows Subsystem for Linux 2 (WSL2). If don't need to execute "
         "CWL documents, then you can ignore this warning, but please "
         "consider migrating to https://pypi.org/project/cwl-utils/ "
-        "for your CWL document processing needs."
+        "for your CWL document processing needs.",
+        stacklevel=1,
     )
 
 SETUP_DIR = os.path.dirname(__file__)
@@ -63,7 +64,7 @@ if USE_MYPYC:
         "cwltool/main.py",
         "cwltool/mutation.py",
         "cwltool/pack.py",
-        # "cwltool/pathmapper.py",  # class PathMapper needs to be subclassable
+        "cwltool/pathmapper.py",
         "cwltool/process.py",
         "cwltool/procgenerator.py",
         # "cwltool/provenance.py",  # WritableBag is having issues
@@ -110,7 +111,7 @@ setup(
         "rdflib >= 4.2.2, < 6.3.0",
         "rdflib >= 4.2.2, < 6.0.0;python_version<='3.6'",
         "shellescape >= 3.4.1, < 3.9",
-        "schema-salad >= 8.2.20211104054942, < 9",
+        "schema-salad >= 8.4, < 9",
         "mypy-extensions",
         "psutil >= 5.6.6",
         "prov == 1.5.1",
@@ -121,7 +122,7 @@ setup(
         "pyparsing != 3.0.2",  # breaks --print-dot (pydot) https://github.com/pyparsing/pyparsing/issues/319
         "pyparsing < 3 ;python_version<='3.6'",  # breaks --print-dot (pydot)
         "argcomplete",
-        "cwl-utils >= 0.19",
+        "cwl-utils >= 0.22",
     ],
     extras_require={
         "deps": ["galaxy-tool-util >= 22.1.2, <23"],

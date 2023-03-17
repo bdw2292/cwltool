@@ -1,17 +1,17 @@
+from unittest import mock
 from unittest.mock import MagicMock
 
-import mock
 import pytest
 from schema_salad.avro import schema
 
 from cwltool.builder import Builder
+from cwltool.command_line_tool import CommandLineTool
 from cwltool.context import LoadingContext, RuntimeContext
 from cwltool.cuda import cuda_version_and_device_count
 from cwltool.errors import WorkflowException
 from cwltool.job import CommandLineJob
 from cwltool.load_tool import load_tool
 from cwltool.main import main
-from cwltool.pathmapper import PathMapper
 from cwltool.process import use_custom_schema
 from cwltool.stdfsaccess import StdFsAccess
 from cwltool.update import INTERNAL_VERSION
@@ -23,9 +23,7 @@ cuda_version = cuda_version_and_device_count()
 
 
 @needs_docker
-@pytest.mark.skipif(
-    cuda_version[0] == "", reason="nvidia-smi required for CUDA not detected"
-)
+@pytest.mark.skipif(cuda_version[0] == "", reason="nvidia-smi required for CUDA not detected")
 def test_cuda_docker() -> None:
     params = [
         "--enable-ext",
@@ -35,9 +33,7 @@ def test_cuda_docker() -> None:
 
 
 @needs_singularity_3_or_newer
-@pytest.mark.skipif(
-    cuda_version[0] == "", reason="nvidia-smi required for CUDA not detected"
-)
+@pytest.mark.skipif(cuda_version[0] == "", reason="nvidia-smi required for CUDA not detected")
 def test_cuda_singularity() -> None:
     params = [
         "--enable-ext",
@@ -47,9 +43,7 @@ def test_cuda_singularity() -> None:
     assert main(params) == 0
 
 
-@pytest.mark.skipif(
-    cuda_version[0] == "", reason="nvidia-smi required for CUDA not detected"
-)
+@pytest.mark.skipif(cuda_version[0] == "", reason="nvidia-smi required for CUDA not detected")
 def test_cuda_no_container() -> None:
     params = [
         "--enable-ext",
@@ -58,9 +52,7 @@ def test_cuda_no_container() -> None:
     assert main(params) == 0
 
 
-@pytest.mark.skipif(
-    cuda_version[0] == "", reason="nvidia-smi required for CUDA not detected"
-)
+@pytest.mark.skipif(cuda_version[0] == "", reason="nvidia-smi required for CUDA not detected")
 def test_cuda_cc_list() -> None:
     params = [
         "--enable-ext",
@@ -100,7 +92,6 @@ def _makebuilder(cudaReq: CWLObjectType) -> Builder:
 @mock.patch("subprocess.check_output")
 @mock.patch("os.makedirs")
 def test_cuda_job_setup_check(makedirs: MagicMock, check_output: MagicMock) -> None:
-
     runtime_context = RuntimeContext({})
 
     cudaReq: CWLObjectType = {
@@ -117,14 +108,13 @@ def test_cuda_job_setup_check(makedirs: MagicMock, check_output: MagicMock) -> N
 </nvidia>
 """
 
-    jb = CommandLineJob(builder, {}, PathMapper, [], [], "")
+    jb = CommandLineJob(builder, {}, CommandLineTool.make_path_mapper, [], [], "")
     jb._setup(runtime_context)
 
 
 @mock.patch("subprocess.check_output")
 @mock.patch("os.makedirs")
 def test_cuda_job_setup_check_err(makedirs: MagicMock, check_output: MagicMock) -> None:
-
     runtime_context = RuntimeContext({})
 
     cudaReq: CWLObjectType = {
@@ -140,7 +130,7 @@ def test_cuda_job_setup_check_err(makedirs: MagicMock, check_output: MagicMock) 
 <cuda_version>1.0</cuda_version>
 </nvidia>
 """
-    jb = CommandLineJob(builder, {}, PathMapper, [], [], "")
+    jb = CommandLineJob(builder, {}, CommandLineTool.make_path_mapper, [], [], "")
     with pytest.raises(WorkflowException):
         jb._setup(runtime_context)
 

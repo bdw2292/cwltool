@@ -2,8 +2,9 @@
 import copy
 import logging
 import math
-from typing import (
+from typing import (  # pylint: disable=unused-import
     IO,
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -11,12 +12,14 @@ from typing import (
     MutableMapping,
     MutableSequence,
     Optional,
+    Type,
     Union,
     cast,
 )
 
 from cwl_utils import expression
 from cwl_utils.file_formats import check_format
+from mypy_extensions import mypyc_attr
 from rdflib import Graph
 from ruamel.yaml.comments import CommentedMap
 from schema_salad.avro.schema import Names, Schema, make_avsc_object
@@ -24,7 +27,6 @@ from schema_salad.exceptions import ValidationException
 from schema_salad.sourceline import SourceLine
 from schema_salad.utils import convert_to_dict, json_dumps
 from schema_salad.validate import validate
-from typing_extensions import TYPE_CHECKING, Type  # pylint: disable=unused-import
 
 from .errors import WorkflowException
 from .loghandler import _logger
@@ -92,6 +94,7 @@ def substitute(value: str, replace: str) -> str:
     return value + replace
 
 
+@mypyc_attr(allow_interpreted_subclasses=True)
 class Builder(HasReqsHints):
     """Helper class to construct a command line from a CWL CommandLineTool."""
 
@@ -186,14 +189,10 @@ class Builder(HasReqsHints):
         if lead_pos is None:
             lead_pos = []
 
-        bindings = []  # type: List[MutableMapping[str, Union[str, List[int]]]]
-        binding = (
-            {}
-        )  # type: Union[MutableMapping[str, Union[str, List[int]]], CommentedMap]
+        bindings: List[MutableMapping[str, Union[str, List[int]]]] = []
+        binding: Union[MutableMapping[str, Union[str, List[int]]], CommentedMap] = {}
         value_from_expression = False
-        if "inputBinding" in schema and isinstance(
-            schema["inputBinding"], MutableMapping
-        ):
+        if "inputBinding" in schema and isinstance(schema["inputBinding"], MutableMapping):
             binding = CommentedMap(schema["inputBinding"].items())
 
             bp = list(aslist(lead_pos))
@@ -208,7 +207,7 @@ class Builder(HasReqsHints):
                         ).makeError(
                             "'position' expressions must evaluate to an int, "
                             f"not a {type(result)}. Expression {position} "
-                            f"resulted in '{result}'."
+                            f"resulted in {result!r}."
                         )
                     binding["position"] = result
                     bp.append(result)
@@ -227,7 +226,7 @@ class Builder(HasReqsHints):
         if isinstance(schema["type"], MutableSequence):
             bound_input = False
             for t in schema["type"]:
-                avsc = None  # type: Optional[Schema]
+                avsc: Optional[Schema] = None
                 if isinstance(t, str) and self.names.has_name(t, None):
                     avsc = self.names.get_name(t, None)
                 elif (
@@ -303,8 +302,7 @@ class Builder(HasReqsHints):
                     else:
                         schema["type"] = "record"
                         schema["fields"] = [
-                            {"name": field_name, "type": "Any"}
-                            for field_name in datum.keys()
+                            {"name": field_name, "type": "Any"} for field_name in datum.keys()
                         ]
                 elif isinstance(datum, list):
                     schema["type"] = "array"
@@ -336,10 +334,10 @@ class Builder(HasReqsHints):
                     if binding:
                         b2 = cast(CWLObjectType, copy.deepcopy(binding))
                         b2["datum"] = item
-                    itemschema = {
+                    itemschema: CWLObjectType = {
                         "type": schema["items"],
                         "inputBinding": b2,
-                    }  # type: CWLObjectType
+                    }
                     for k in ("secondaryFiles", "format", "streamable"):
                         if k in schema:
                             itemschema[k] = schema[k]
@@ -362,9 +360,9 @@ class Builder(HasReqsHints):
                 datum = cast(CWLObjectType, datum)
                 self.files.append(datum)
 
-                loadContents_sourceline = (
-                    None
-                )  # type: Union[None, MutableMapping[str, Union[str, List[int]]], CWLObjectType]
+                loadContents_sourceline: Union[
+                    None, MutableMapping[str, Union[str, List[int]]], CWLObjectType
+                ] = None
                 if binding and binding.get("loadContents"):
                     loadContents_sourceline = binding
                 elif schema.get("loadContents"):
@@ -378,14 +376,10 @@ class Builder(HasReqsHints):
                         debug,
                     ):
                         try:
-                            with self.fs_access.open(
-                                cast(str, datum["location"]), "rb"
-                            ) as f2:
+                            with self.fs_access.open(cast(str, datum["location"]), "rb") as f2:
                                 datum["contents"] = content_limit_respected_read(f2)
                         except Exception as e:
-                            raise Exception(
-                                "Reading {}\n{}".format(datum["location"], e)
-                            )
+                            raise Exception("Reading {}\n{}".format(datum["location"], e)) from e
 
                 if "secondaryFiles" in schema:
                     if "secondaryFiles" not in datum:
@@ -398,13 +392,8 @@ class Builder(HasReqsHints):
 
                     for num, sf_entry in enumerate(sf_schema):
                         if "required" in sf_entry and sf_entry["required"] is not None:
-                            required_result = self.do_eval(
-                                sf_entry["required"], context=datum
-                            )
-                            if not (
-                                isinstance(required_result, bool)
-                                or required_result is None
-                            ):
+                            required_result = self.do_eval(sf_entry["required"], context=datum)
+                            if not (isinstance(required_result, bool) or required_result is None):
                                 if sf_schema == schema["secondaryFiles"]:
                                     sf_item: Any = sf_schema[num]
                                 else:
@@ -415,8 +404,8 @@ class Builder(HasReqsHints):
                                     "The result of a expression in the field "
                                     "'required' must "
                                     f"be a bool or None, not a {type(required_result)}. "
-                                    f"Expression '{sf_entry['required']}' resulted "
-                                    f"in '{required_result}'."
+                                    f"Expression {sf_entry['required']!r} resulted "
+                                    f"in {required_result!r}."
                                 )
                             sf_required = required_result
                         else:
@@ -425,9 +414,7 @@ class Builder(HasReqsHints):
                         if "$(" in sf_entry["pattern"] or "${" in sf_entry["pattern"]:
                             sfpath = self.do_eval(sf_entry["pattern"], context=datum)
                         else:
-                            sfpath = substitute(
-                                cast(str, datum["basename"]), sf_entry["pattern"]
-                            )
+                            sfpath = substitute(cast(str, datum["basename"]), sf_entry["pattern"])
 
                         for sfname in aslist(sfpath):
                             if not sfname:
@@ -438,8 +425,7 @@ class Builder(HasReqsHints):
                                 d_location = cast(str, datum["location"])
                                 if "/" in d_location:
                                     sf_location = (
-                                        d_location[0 : d_location.rindex("/") + 1]
-                                        + sfname
+                                        d_location[0 : d_location.rindex("/") + 1] + sfname
                                     )
                                 else:
                                     sf_location = d_location + sfname
@@ -454,7 +440,7 @@ class Builder(HasReqsHints):
                                     "Expected secondaryFile expression to "
                                     "return type 'str', a 'File' or 'Directory' "
                                     "dictionary, or a list of the same. Received "
-                                    f"'{type(sfname)} from '{sf_entry['pattern']}'."
+                                    f"{type(sfname)!r} from {sf_entry['pattern']!r}."
                                 )
 
                             for d in cast(
@@ -462,9 +448,7 @@ class Builder(HasReqsHints):
                                 datum["secondaryFiles"],
                             ):
                                 if not d.get("basename"):
-                                    d["basename"] = d["location"][
-                                        d["location"].rindex("/") + 1 :
-                                    ]
+                                    d["basename"] = d["location"][d["location"].rindex("/") + 1 :]
                                 if d["basename"] == sfbasename:
                                     found = True
 
@@ -488,9 +472,7 @@ class Builder(HasReqsHints):
                                         ),
                                         sfname,
                                     )
-                                elif discover_secondaryFiles and self.fs_access.exists(
-                                    sf_location
-                                ):
+                                elif discover_secondaryFiles and self.fs_access.exists(sf_location):
                                     addsf(
                                         cast(
                                             MutableSequence[CWLObjectType],
@@ -529,9 +511,9 @@ class Builder(HasReqsHints):
                                     "An expression in the 'format' field must "
                                     "evaluate to a string, or list of strings. "
                                     "However a non-string item was received: "
-                                    f"'{entry}' of type '{type(entry)}'. "
-                                    f"The expression was '{schema['format']}' and "
-                                    f"its fully evaluated result is '{eval_format}'."
+                                    f"{entry!r} of type {type(entry)!r}. "
+                                    f"The expression was {schema['format']!r} and "
+                                    f"its fully evaluated result is {eval_format!r}."
                                 )
                             if expression.needs_parsing(entry):
                                 message = (
@@ -542,7 +524,7 @@ class Builder(HasReqsHints):
                                     "Expressions or CWL Parameter References. List "
                                     f"entry number {index+1} contains the following "
                                     "unallowed CWL Parameter Reference or Expression: "
-                                    f"'{entry}'."
+                                    f"{entry!r}."
                                 )
                             if message:
                                 raise SourceLine(
@@ -550,15 +532,13 @@ class Builder(HasReqsHints):
                                 ).makeError(message)
                         evaluated_format = cast(List[str], eval_format)
                     else:
-                        raise SourceLine(
-                            schema, "format", WorkflowException, debug
-                        ).makeError(
+                        raise SourceLine(schema, "format", WorkflowException, debug).makeError(
                             "An expression in the 'format' field must "
                             "evaluate to a string, or list of strings. "
                             "However the type of the expression result was "
                             f"{type(eval_format)}. "
-                            f"The expression was '{schema['format']}' and "
-                            f"its fully evaluated result is 'eval_format'."
+                            f"The expression was {schema['format']!r} and "
+                            f"its fully evaluated result is {eval_format!r}."
                         )
                     try:
                         check_format(
@@ -568,8 +548,8 @@ class Builder(HasReqsHints):
                         )
                     except ValidationException as ve:
                         raise WorkflowException(
-                            "Expected value of '%s' to have format %s but\n "
-                            " %s" % (schema["name"], schema["format"], ve)
+                            f"Expected value of {schema['name']!r} to have "
+                            f"format {schema['format']!r} but\n {ve}"
                         ) from ve
 
                 visit_class(
@@ -642,20 +622,16 @@ class Builder(HasReqsHints):
                 WorkflowException,
                 debug,
             ):
-                raise WorkflowException(
-                    "'separate' option can not be specified without prefix"
-                )
+                raise WorkflowException("'separate' option can not be specified without prefix")
 
-        argl = []  # type: MutableSequence[CWLOutputType]
+        argl: MutableSequence[CWLOutputType] = []
         if isinstance(value, MutableSequence):
             if binding.get("itemSeparator") and value:
                 itemSeparator = cast(str, binding["itemSeparator"])
                 argl = [itemSeparator.join([self.tostr(v) for v in value])]
             elif binding.get("valueFrom"):
                 value = [self.tostr(v) for v in value]
-                return cast(List[str], ([prefix] if prefix else [])) + cast(
-                    List[str], value
-                )
+                return cast(List[str], ([prefix] if prefix else [])) + cast(List[str], value)
             elif prefix and value:
                 return [prefix]
             else:

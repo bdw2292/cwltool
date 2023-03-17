@@ -186,10 +186,10 @@ def test_directory_workflow(tmp_path: Path) -> None:
 
     # Input files should be captured by hash value,
     # even if they were inside a class: Directory
-    for (l, l_hash) in sha1.items():
+    for letter, l_hash in sha1.items():
         prefix = l_hash[:2]  # first 2 letters
         p = folder / "data" / prefix / l_hash
-        assert p.is_file(), f"Could not find {l} as {p}"
+        assert p.is_file(), f"Could not find {letter} as {p}"
 
 
 @needs_docker
@@ -383,9 +383,7 @@ def check_ro(base_path: Path, nested: bool = False) -> None:
 
     packed = urllib.parse.urljoin(arcp_root, "/workflow/packed.cwl")
     primary_job = urllib.parse.urljoin(arcp_root, "/workflow/primary-job.json")
-    primary_prov_nt = urllib.parse.urljoin(
-        arcp_root, "/metadata/provenance/primary.cwlprov.nt"
-    )
+    primary_prov_nt = urllib.parse.urljoin(arcp_root, "/metadata/provenance/primary.cwlprov.nt")
     uuid = arcp.parse_arcp(arcp_root).uuid
 
     highlights = set(g.subjects(OA.motivatedBy, OA.highlighting))
@@ -541,6 +539,7 @@ def check_prov(
             assert (d, RDF.type, PROV.Dictionary) in g
             assert (d, RDF.type, PROV.Collection) in g
             assert (d, RDF.type, PROV.Entity) in g
+            assert len(list(g.objects(d, CWLPROV.basename))) == 1
 
             files = set()
             for entry in g.objects(d, PROV.hadDictionaryMember):
@@ -592,8 +591,8 @@ def check_prov(
 
 
 @pytest.fixture
-def research_object() -> Generator[ResearchObject, None, None]:
-    re_ob = ResearchObject(StdFsAccess(""))
+def research_object(tmp_path: Path) -> Generator[ResearchObject, None, None]:
+    re_ob = ResearchObject(StdFsAccess(str(tmp_path / "ro")), temp_prefix_ro=str(tmp_path / "tmp"))
     yield re_ob
     re_ob.close()
 
@@ -770,8 +769,6 @@ def test_research_object() -> None:
     pass
 
 
-# Research object may need to be pickled (for Toil)
-
-
 def test_research_object_picklability(research_object: ResearchObject) -> None:
+    """Research object may need to be pickled (for Toil)."""
     assert pickle.dumps(research_object) is not None
